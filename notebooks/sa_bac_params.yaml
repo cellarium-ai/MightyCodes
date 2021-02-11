@@ -1,0 +1,152 @@
+# max iterations (forced stop)
+max_iters: .inf
+    
+# max quench cycles (forced stop)
+max_cycles: .inf
+
+# increasing quality factor slows down both cooling and resampling
+quality_factor: 1
+    
+# number of cooling iterations for quality_factor = 1
+base_cooling_iters: 500
+    
+# stored quenching cycles
+population_buffer_size: 50
+
+# total number of MCMC chains
+n_subsystems: 512
+
+# MCMC chain grouping for resampling 
+n_resampling_groups: 64
+
+# interval between Boltzmann resamplings within each resampling group 
+resampling_local_interval: 1
+
+# interval between Bolzmann resamplings across all subsystems
+resampling_global_interval: .inf
+
+# initial beta (in the units of inverse energy spread of random states)
+dimensionless_beta_0: 2.0
+
+# final beta (in the units of inverse energy spread of random states)
+dimensionless_beta_f: 500.0
+
+# largest beta tolerated in any quench cycle (in the units of inverse energy spread of random states)
+dimensionless_beta_max: 2000.0
+
+# the ratio of final temperature to initial temperature in a quench cycle 
+quench_ratio: 0.01
+
+# peak to peak temperature ratio between consecutive quench cycles
+# (smaller values mean lower reheating temperatures)
+reheating_ratio: 0.8
+
+# position in cycle to start Boltzmann resampling
+# (0.0 and 1.0 mark the start and end of a cycle, in terms of beta)
+resampling_start_cycle_position: 0.05
+
+# max number of atomic perturbations applied to the state to produce
+# a new MCMC proposal
+perturb_max_moves: 4
+
+# lower and upper bounds on MCMC acceptance rate
+mcmc_eff_acc_rate_lo: 0.3
+mcmc_eff_acc_rate_hi: 0.4
+
+# exponential moving average coefficients
+prob_mcmc_acc_emp_ma_beta: 0.95
+prob_mcmc_acc_pred_ma_beta: 0.95
+
+# learning rate and training interval of the MCMC acceptance rate predictor
+mcmc_acc_pred_optim_lr: 1e-3
+mcmc_acc_pred_interval: 1
+
+# learning rate of MCMC proposal distribution
+mcmc_prop_optim_lr: 5e-3
+
+# number of MCMC proposal distribution update iterations per cooling iteration
+n_mcmc_prop_optim_steps_during_cooling: 1
+
+# number of MCMC proposal distribution update iterations after reheating
+n_mcmc_prop_optim_steps_after_reheating: 100
+
+# Gumble-Softmax temperature (used in reparameterizing discrete MCMC paths)
+gumble_softmax_temperature: 0.1
+
+# number of MCMC paths to evaluate per each subsystem during MCMC proposal
+# distribution updates
+n_path_samples_per_subsystem: 50
+
+# dynamical regularization hyperparameters for constraining MCMC acceptance rate 
+lambda_mcmc_acc_rate_lo: 1.
+lambda_mcmc_acc_rate_hi: 100.
+lambda_mcmc_acc_decay_rate: 1.
+lambda_mcmc_acc_increase_rate: 1.
+
+# the log prob dynamic range of MCMC path lengths and move types (to avoid
+# getting stuck in pathological states)
+log_prob_mcmc_prop_move_type_m_unconstrained_range: 2.0
+log_prob_mcmc_prop_n_moves_k_unconstrained_range: 2.0
+
+# fraction of uniform distributin admixing with MCMC proposal distribution
+# ("exploration")
+mcmc_prop_n_moves_uniform_admix: 0.1
+mcmc_prop_move_types_uniform_admix: 0.1
+
+# bookkeeping
+record_iteration_summary: true
+record_state_summary: true
+
+# the number of best states to keep (globally)
+top_k_keep: 256
+
+# binary asymmetric channel model specification
+experiment_prefix: 'small'
+channel_model: 'channel_bac_merfish'
+min_hamming_weight: 1
+max_hamming_weight: 7
+code_length: 8
+n_types: 80
+source_nonuniformity: 300.
+
+# max size of various atomic perturbations
+perturb_max_hamming_distance: 4
+perturb_max_hamming_weight_change: 2
+perturb_max_neighbor_hop_range: 3
+
+# how many codebooks to evaluate in one batch?
+# (decreaes if you run out of GPU memory)
+eval_split_size: 512
+
+# optimality metric (valid choices: 'tpr', 'fdr', 'f1_reject_auc')
+metric_type: 'fdr'
+
+# how many batches of random codebooks to sample to estimte
+# the energy spread?
+energy_spread_estimation_n_rounds: 20
+
+# energy loc and scale of random states; if set to ".inf", these
+# values will be estimated and replaced
+rand_state_energy_loc: .inf
+rand_state_energy_scale: .inf
+
+# how many codebooks to evaluate in one batch?
+# (decreaes if you run out of GPU memory)
+energy_spread_estimation_batch_size: 512
+
+# parameters related to metric_type == 'f1_reject_auc'
+delta_q_max: 1e-2
+n_map_reject_thresholds: 20
+max_reject_ratio: 0.2
+
+# logging and checkpointing
+checkpoint_frequency: 500
+ignore_checkpoint: False
+make_plots: True
+log_frequency: 100
+log_sig_digits: 4
+log_column_width_small: 16
+log_column_width_large: 32
+log_energy_scale: 100.
+output_root: /home/jupyter/mb-ml-data/MERFISH-coding/sa
+checkpoint_file: checkpoint.tar.gz

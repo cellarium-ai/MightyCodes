@@ -52,11 +52,11 @@ class CLI(AbstractCLI):
         log_file = os.path.join(params['output_root'], "run.log")
         logging.basicConfig(
             level=logging.INFO,
-            format="mighty-codes:sa-bac: %(message)s",
+            format="mighty-codes:sa-bac:%(asctime)s: %(message)s",
             filename=log_file,
             filemode="w")
         console = logging.StreamHandler()
-        formatter = logging.Formatter("mighty-codes:sa-bac: %(message)s")
+        formatter = logging.Formatter("mighty-codes:sa-bac:%(asctime)s: %(message)s", "%H:%M:%S")
         console.setFormatter(formatter)  # Use the same format for stdout.
         logging.getLogger('').addHandler(console)  # Log to stdout and a file.
 
@@ -65,7 +65,7 @@ class CLI(AbstractCLI):
 
         # Log the start time.
         logging.info(datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
-
+                                      
         # instantiate
         sabac = SimulatedAnnealingBinaryAsymmetricChannel(
             params=params,

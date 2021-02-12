@@ -123,7 +123,7 @@ metric_type: 'fdr'
 
 # how many batches of random codebooks to sample to estimte
 # the energy spread?
-energy_spread_estimation_n_rounds: 20
+energy_spread_estimation_n_rounds: 100
 
 # energy loc and scale of random states; if set to ".inf", these
 # values will be estimated and replaced
@@ -140,7 +140,7 @@ n_map_reject_thresholds: 20
 max_reject_ratio: 0.2
 
 # logging and checkpointing
-checkpoint_frequency: 500
+checkpoint_interval_seconds: 60
 ignore_checkpoint: False
 make_plots: True
 log_frequency: 100
@@ -150,7 +150,7 @@ log_column_width_large: 32
 log_energy_scale: 100.
 
 # set to a writable path
-output_root: /home/user
+output_root: .
 
 # leave this be
 checkpoint_file: checkpoint.tar.gz

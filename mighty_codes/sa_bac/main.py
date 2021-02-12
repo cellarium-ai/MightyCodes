@@ -4,6 +4,8 @@ from ruamel_yaml import YAML
 from ruamel_yaml.comments import CommentedMap
 import logging
 import pprint
+import time
+import math
 
 import numpy as np
 import torch
@@ -460,9 +462,7 @@ class BatchedBinaryCodebookEnergyCalculator(BatchedStateEnergyCalculator):
             device: torch.device,
             dtype: torch.dtype,
             **kwargs):
-        
-        assert metric_type in {'fdr', 'tpr', 'f1_reject_auc'}
-        
+                
         self.metric_type = metric_type
         self.experiment_spec = experiment_spec
         self.bac_channel_spec = bac_channel_spec
@@ -472,67 +472,100 @@ class BatchedBinaryCodebookEnergyCalculator(BatchedStateEnergyCalculator):
         self.dtype = dtype
         
         self.pi_t = to_torch(experiment_spec.pi_t, self.device, self.dtype)
-        self.reduce = lambda metric_bt: metric_bt.mean(-1)
+        self.mean_reduce = lambda metric_bt: metric_bt.mean(-1)
         self.complement = lambda metric_b: (1. - metric_b)
         self.state_bx_to_codebook_btl = self.batched_binary_codebook_manipulator.get_explicit_codebook_btl
         
         # set the state energy calculator
+        optional_fdr_quantile = self.parse_quantile_based_metric_type_str('fdr', metric_type)
+        optional_tpr_quantile = self.parse_quantile_based_metric_type_str('tpr', metric_type)
+        f1_reject_auc_metrics_dict_calculator = lambda state_bx: \
+            calculate_bac_f1_reject_auc_metric_dict(
+                codebook_btl=self.state_bx_to_codebook_btl(state_bx),
+                pi_t=self.pi_t,
+                bac_model=self.bac_channel_spec.channel_model,
+                delta_q_max=delta_q_max,
+                n_map_reject_thresholds=n_map_reject_thresholds,
+                max_reject_ratio=max_reject_ratio,
+                split_size=split_size,
+                device=self.device,
+                dtype=dtype)
+        basic_metrics_dict_calculator = lambda state_bx: \
+            calculate_bac_standard_metric_dict(
+                codebook_btl=self.state_bx_to_codebook_btl(state_bx),
+                pi_t=self.pi_t,
+                bac_model=self.bac_channel_spec.channel_model,
+                split_size=split_size)
+
+        
         if metric_type == 'f1_reject_auc':
-            
             assert 'delta_q_max' in kwargs
             assert 'n_map_reject_thresholds' in kwargs
             assert 'max_reject_ratio' in kwargs
-            
             delta_q_max = kwargs['delta_q_max']
             n_map_reject_thresholds = kwargs['n_map_reject_thresholds']
             max_reject_ratio = kwargs['max_reject_ratio']
-            
-            self._calculate_state_metrics_dict = lambda state_bx: \
-                calculate_bac_f1_reject_auc_metric_dict(
-                    codebook_btl=self.state_bx_to_codebook_btl(state_bx),
-                    pi_t=self.pi_t,
-                    bac_model=self.bac_channel_spec.channel_model,
-                    delta_q_max=delta_q_max,
-                    n_map_reject_thresholds=n_map_reject_thresholds,
-                    max_reject_ratio=max_reject_ratio,
-                    split_size=split_size,
-                    device=self.device,
-                    dtype=dtype)
-            
+            self._calculate_state_metrics_dict = f1_reject_auc_metrics_dict_calculator
             self._calculate_state_energy = lambda state_bx: \
-                self.reduce(
+                self.mean_reduce(
                     self.complement(
                         self._calculate_state_metrics_dict(state_bx)['normalized_auc_f_1_rej_bt']))
             
         elif metric_type == 'fdr':
-            
-            self._calculate_state_metrics_dict = lambda state_bx: \
-                calculate_bac_standard_metric_dict(
-                    codebook_btl=self.state_bx_to_codebook_btl(state_bx),
-                    pi_t=self.pi_t,
-                    bac_model=self.bac_channel_spec.channel_model,
-                    split_size=split_size)
-
+            self._calculate_state_metrics_dict = basic_metrics_dict_calculator
             self._calculate_state_energy = lambda state_bx: \
-                self.reduce(
+                self.mean_reduce(
                     self._calculate_state_metrics_dict(state_bx)['fdr_bt'])
             
-        elif metric_type == 'tpr':
-            
-            self._calculate_state_metrics_dict = lambda state_bx: \
-                calculate_bac_standard_metric_dict(
-                    codebook_btl=self.state_bx_to_codebook_btl(state_bx),
-                    pi_t=self.pi_t,
-                    bac_model=self.bac_channel_spec.channel_model,
-                    split_size=split_size)
-
+        elif metric_type == 'tpr':          
+            self._calculate_state_metrics_dict = basic_metrics_dict_calculator
             self._calculate_state_energy = lambda state_bx: \
-                self.reduce(
+                self.mean_reduce(
                     self.complement(
-                        self._calculate_state_metrics_dict(state_bx)['tpr']))
+                        self._calculate_state_metrics_dict(state_bx)['tpr_bt']))
+            
+        elif optional_fdr_quantile is not None:
+            self._calculate_state_metrics_dict = basic_metrics_dict_calculator
+            self._calculate_state_energy = lambda state_bx: \
+                self.mean_reduce(
+                    self.get_top_quantile(
+                        quantile=optional_fdr_quantile,
+                        metric_bt=self._calculate_state_metrics_dict(state_bx)['fdr_bt']))
+            
+        elif optional_tpr_quantile is not None:
+            self._calculate_state_metrics_dict = basic_metrics_dict_calculator
+            self._calculate_state_energy = lambda state_bx: \
+                self.mean_reduce(
+                    self.get_top_quantile(
+                        quantile=optional_fdr_quantile,
+                        metric_bt=self.complement(self._calculate_state_metrics_dict(state_bx)['tpr_bt'])))
         else:
-            raise ValueError('Unknown metric type!')
+            raise ValueError(
+                'Unknown metric type -- allowed values: '
+                'f1_reject_auc, fdr, tpr, fdr[<quantile>], tpr[<quantile>]')
+    
+    def get_top_quantile(self, quantile: float, metric_bt: torch.Tensor) -> torch.Tensor:
+        n_types = metric_bt.size(1)
+        n_keep = math.ceil(n_types * quantile)
+        sorted_metric_bt = torch.sort(metric_bt, dim=-1).values
+        return sorted_metric_bt[:, -n_keep:]
         
+    def parse_quantile_based_metric_type_str(
+            self,
+            base_metric_type: str,
+            metric_type_string: str) -> Optional[float]:
+        if metric_type_string[:4] == (base_metric_type + '[') and metric_type_string[-1] == ']':
+            try:
+                i_begin = metric_type_string.find('[') + 1
+                i_end = metric_type_string.find(']')
+                assert i_end > i_begin
+                quantile = float(metric_type_string[i_begin:i_end])
+                assert 0. < quantile < 1.
+                return quantile
+            except:
+                return None
+        return None
+
     def calculate_state_energy(self, state_bx: torch.Tensor) -> torch.Tensor:
         return self._calculate_state_energy(state_bx)
     
@@ -603,7 +636,7 @@ class SimulatedAnnealingBinaryAsymmetricChannel:
 
         # generate output path
         self.output_root = params['output_root']
-        self.output_prefix = self.problem_spec.name
+        self.output_prefix = self.problem_spec.name + '__' + params['metric_type']
         self.output_path = os.path.join(self.output_root, self.output_prefix)
 
         # log problem specification
@@ -713,15 +746,55 @@ class SimulatedAnnealingBinaryAsymmetricChannel:
         if checkpoint_load_success:
             self.log_info("Setting the state_dict from the checkpoint ...")
             self.ptpsa.load_state_dict(loaded_state_dict)
-    
+
+    def perform_checkpointing(self):
+        self.log_info("Checkpointing the simulation state ...")
+        # save ptpsa state
+        torch.save(
+            self.ptpsa.state_dict(),
+            os.path.join(self.output_path, 'latest_state.pkl'))
+
+        # make plots
+        self.log_info("Making plots ...")
+        if self.params['make_plots']:
+
+            plot_sa_trajectory(
+                ptpsa=self.ptpsa,
+                output_path=self.output_path,
+                output_prefix='latest_trajectory',
+                show=False)
+
+            plot_sa_codebook(
+                ptpsa=self.ptpsa,
+                codebook_bx=self.ptpsa.top_state_kx,
+                energy_b=self.ptpsa.top_energy_k,
+                idx=0,
+                batch_name='Top states',
+                output_path=self.output_path,
+                output_prefix='latest_codebook',
+                show=False)
+
+            plot_sa_resampling_buffer(
+                ptpsa=self.ptpsa,
+                output_path=self.output_path,
+                output_prefix='resampling_buffer',
+                show=False)
+
+        # make a .tar.gz file
+        self.log_info("Compressing the output ...")
+        tmp_checkpoint_path = os.path.join(self.output_root, '_checkpoint.tar.gz')
+        final_checkpoint_path = os.path.join(self.output_root, 'checkpoint.tar.gz')
+        with tarfile.open(tmp_checkpoint_path, 'w:gz') as tar:
+            tar.add(self.output_path, arcname=self.output_prefix)
+        os.replace(tmp_checkpoint_path, final_checkpoint_path)
+
     def run(self):
         self.log_info("Starting the simulation ...")
         torch.cuda.empty_cache()
 
         # logging parameters
         log_frequency = self.params['log_frequency']
-        make_plots = self.params['make_plots']
-        checkpoint_frequency = self.params['checkpoint_frequency']
+        checkpoint_interval_seconds = self.params['checkpoint_interval_seconds']
         small_col = self.params['log_column_width_small']
         large_col = self.params['log_column_width_large']
         sig_digits = self.params['log_sig_digits']
@@ -741,8 +814,9 @@ class SimulatedAnnealingBinaryAsymmetricChannel:
         self.log_info('=' * len(header_string))
 
         exit_code = SimulatedAnnealingExitCode.CONTINUE
-
+        t_last_checkpoint = time.perf_counter()
         while exit_code == SimulatedAnnealingExitCode.CONTINUE:
+            current_time = time.perf_counter()
 
             # step
             exit_code = self.ptpsa.step()
@@ -771,45 +845,10 @@ class SimulatedAnnealingBinaryAsymmetricChannel:
                 self.log_info(log_string)
 
             # checkpoint
-            if self.ptpsa.i_iter > 1 and self.ptpsa.i_iter % checkpoint_frequency == 1:
-                self.log_info("Checkpointing the simulation state ...")
-                # save ptpsa state
-                torch.save(
-                    self.ptpsa.state_dict(),
-                    os.path.join(self.output_path, 'latest_state.pkl'))
-
-                # make plots
-                self.log_info("Making plots ...")
-                if make_plots:
-
-                    plot_sa_trajectory(
-                        ptpsa=self.ptpsa,
-                        output_path=self.output_path,
-                        output_prefix='latest_trajectory',
-                        show=False)
-
-                    plot_sa_codebook(
-                        ptpsa=self.ptpsa,
-                        codebook_bx=self.ptpsa.top_state_kx,
-                        energy_b=self.ptpsa.top_energy_k,
-                        idx=0,
-                        batch_name='Top states',
-                        output_path=self.output_path,
-                        output_prefix='latest_codebook',
-                        show=False)
-
-                    plot_sa_resampling_buffer(
-                        ptpsa=self.ptpsa,
-                        output_path=self.output_path,
-                        output_prefix='resampling_buffer',
-                        show=False)
-
-                # make a .tar.gz file
-                self.log_info("Compressing the output ...")
-                tmp_checkpoint_path = os.path.join(self.output_root, '_checkpoint.tar.gz')
-                final_checkpoint_path = os.path.join(self.output_root, 'checkpoint.tar.gz')
-                with tarfile.open(tmp_checkpoint_path, 'w:gz') as tar:
-                    tar.add(self.output_path, arcname=self.output_prefix)
-                os.replace(tmp_checkpoint_path, final_checkpoint_path)
-
+            if (current_time - t_last_checkpoint) > checkpoint_interval_seconds:
+                t_last_checkpoint = current_time
+                self.perform_checkpointing()
+        
+        # end with a final checkpointing
+        self.perform_checkpointing()
         self.log_info(f"Simulation concluded -- exit code: {exit_code}")

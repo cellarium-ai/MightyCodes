@@ -8,6 +8,7 @@ mighty_codes.egg-info/
 .pytest_cache/
 build/
 dist/
+ws/
 .venv/
 .eggs/
 .idea/

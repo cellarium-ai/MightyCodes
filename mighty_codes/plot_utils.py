@@ -97,7 +97,7 @@ def plot_sa_trajectory(
         3.,
         marker='x', s=20, color='red', label='reheating')
 
-    ax1.legend(loc='upper left', ncol=3)
+    ax1.legend(loc='upper right', ncol=3)
     ax1.set_xticks([])
     ax1.set_yticks([])
 
@@ -121,18 +121,18 @@ def plot_sa_trajectory(
     ax3.plot(i_iter_list, global_energy_min_list, color='blue', label='min energy (global)')
     ax3.set_ylabel('energy')
     ax3.set_xticks([])
-    ax3.legend(ncol=4)
+    ax3.legend(loc='upper right', ncol=4)
 
     ax4.plot(i_iter_list, mcmc_acc_rate_emp_list, color='green', label='MCMC accept rate (emp)')
     ax4.plot(i_iter_list, mcmc_acc_rate_pred_list, '--', color='green', label='MCMC accept rate (pred)')
     ax4.plot(i_iter_list, [ptpsa.mcmc_eff_acc_rate_lo] * len(i_iter_list), color='gray', lw=0.5)
     ax4.plot(i_iter_list, [ptpsa.mcmc_eff_acc_rate_hi] * len(i_iter_list), color='gray', lw=0.5)
     ax4.set_xlabel('iteration')
-    ax4.legend(ncol=2)
+    ax4.legend(loc='upper right', ncol=2)
 
     ax5.plot(i_iter_list, mcmc_acc_rate_lambda_list, color='red', label='MCMC accept rate lambda')
     ax5.set_xlabel('iteration')
-    ax5.legend(ncol=1)
+    ax5.legend(loc='upper right', ncol=1)
     
     # save
     fig.tight_layout()
@@ -206,7 +206,7 @@ def plot_sa_resampling_buffer(
         ax.hist(to_np(t.energy_b), bins=50, alpha=0.5, label=str(i));
     ax.set_xlabel('Energy')
     ax.set_ylabel('Population')
-    ax.legend(fontsize=8, ncol=2)
+    ax.legend(loc='upper right', fontsize=8, ncol=2)
     
     # save
     fig.tight_layout()

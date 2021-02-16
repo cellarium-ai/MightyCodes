@@ -2,7 +2,7 @@ import argparse
 
 
 def add_subparser_args(subparsers: argparse) -> argparse:
-    """Add tool-specific arguments for remove-background.
+    """Add tool-specific arguments.
 
     Args:
         subparsers: Parser object before addition of arguments specific to
@@ -20,12 +20,12 @@ def add_subparser_args(subparsers: argparse) -> argparse:
 
     subparser.add_argument(
         "-i",
-        "--input-params-yaml-file",
+        "--input-yaml-file",
         nargs=None,
         type=str,
-        dest='input_params_yaml_file',
+        dest='input_yaml_file',
         default=None,
         required=True,
-        help="YAML file specifying run parameters.")
+        help="Inputt YAML file.")
 
     return subparsers

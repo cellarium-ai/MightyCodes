@@ -174,10 +174,22 @@ def plot_sa_codebook(
     ax1.set_xlabel('Gene rank')
 
     ax2.plot(to_np(metrics_dict['tpr_bt'][idx, :]))
+    min_tpr = 100. * metrics_dict['tpr_bt'][idx, :].min().item()
+    max_tpr = 100. * metrics_dict['tpr_bt'][idx, :].max().item()
+    mean_tpr = 100. * metrics_dict['tpr_bt'][idx, :].mean().item()
+    ax2.set_title(
+        f'(min, max, mean) TPR (100x): {min_tpr:.6f}, {max_tpr:.6f}, {mean_tpr:.6f}',
+        fontsize=16)
     ax2.set_ylabel('TPR')
     ax2.set_xlabel('Gene rank')
 
     ax3.plot(to_np(metrics_dict['fdr_bt'][idx, :]))
+    min_fdr = 100. * metrics_dict['fdr_bt'][idx, :].min().item()
+    max_fdr = 100. * metrics_dict['fdr_bt'][idx, :].max().item()
+    mean_fdr = 100. * metrics_dict['fdr_bt'][idx, :].mean().item()
+    ax3.set_title(
+        f'(min, max, mean) FDR (100x): {min_fdr:.6f}, {max_fdr:.6f}, {mean_fdr:.6f}',
+        fontsize=16)
     ax3.set_ylabel('FDR')
     ax3.set_xlabel('Gene rank')
 

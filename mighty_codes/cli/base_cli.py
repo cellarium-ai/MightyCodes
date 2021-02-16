@@ -12,7 +12,10 @@ import importlib
 
 
 # New tools should be added to this list.
-TOOL_NAME_LIST = ['sa-bac']
+TOOL_NAME_LIST = [
+    'sa-bac',
+    'yaml-tools'
+]
 
 
 class AbstractCLI(ABC):

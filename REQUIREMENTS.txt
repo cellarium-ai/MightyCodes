@@ -1,6 +1,7 @@
+matplotlib
 numpy
 scipy
-pandas
+torch
+boltons
 pyro-ppl>=0.3.2
-matplotlib
 ruamel.yaml

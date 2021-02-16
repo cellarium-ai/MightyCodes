@@ -1,13 +1,13 @@
 """Command-line tool functionality for sa-bac."""
 
-from mighty_codes.cli.base_cli import AbstractCLI
-from mighty_codes.sa_bac.main import SimulatedAnnealingBinaryAsymmetricChannel
-
 from ruamel_yaml import YAML
 import logging
 import os
 import sys
 from datetime import datetime
+
+from mighty_codes.cli.base_cli import AbstractCLI
+from mighty_codes.sa_bac.main import SimulatedAnnealingBinaryAsymmetricChannel
 
 yaml = YAML()
 yaml.indent(mapping=2, sequence=4, offset=2)
@@ -28,7 +28,7 @@ class CLI(AbstractCLI):
 
         # Ensure that if there's a tilde for $HOME in the file path, it works.
         try:
-            args.input_params_yaml_file = os.path.expanduser(args.input_params_yaml_file)
+            args.input_yaml_file = os.path.expanduser(args.input_yaml_file)
         except TypeError:
             raise ValueError("Problem with provided input paths.")
 
@@ -40,16 +40,16 @@ class CLI(AbstractCLI):
         """Run the main tool functionality on parsed arguments."""
 
         try:
-            with open(args.input_params_yaml_file, 'r') as f:
+            with open(args.input_yaml_file, 'r') as f:
                 params = yaml.load(f)
         except IOError:
-            raise RuntimeError(f"Error loading the input YAML file {input_yaml_file}!")
+            raise RuntimeError(f"Error loading the input YAML file {args.input_yaml_file}!")
 
         assert 'output_root' in params
         assert os.access(params['output_root'], os.W_OK)
         
         # Send logging messages to stdout as well as a log file.
-        log_file = os.path.join(params['output_root'], "run.log")
+        log_file = os.path.join(params['output_root'], "run_sa_bac.log")
         logging.basicConfig(
             level=logging.INFO,
             format="mighty-codes:sa-bac:%(asctime)s: %(message)s",
@@ -61,10 +61,7 @@ class CLI(AbstractCLI):
         logging.getLogger('').addHandler(console)  # Log to stdout and a file.
 
         # Log the command as typed by user.
-        logging.info("Command:\n" + ' '.join(['mighty_codes', 'sa-bac'] + sys.argv[2:]))
-
-        # Log the start time.
-        logging.info(datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+        logging.info("Command:\n" + ' '.join(['mighty-codes', 'sa-bac'] + sys.argv[2:]))
                                       
         # instantiate
         sabac = SimulatedAnnealingBinaryAsymmetricChannel(

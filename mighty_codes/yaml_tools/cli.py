@@ -77,15 +77,21 @@ class CLI(AbstractCLI):
                 value = self.cast(str_value, str_type)
                 if key in params:
                     logging.info(f"Key {key} already exists; old value: {params[key]}, new value: {value}")
-                    params.yaml_set_comment_before_after_key(
-                        key,
-                        before=f"Updated by yaml-tools; old value: {params[key]}, new value: {value}")                        
+                    try:
+                        params.yaml_set_comment_before_after_key(
+                            key,
+                            before=f"Updated by yaml-tools; old value: {params[key]}, new value: {value}")
+                    except:
+                        pass
                     params[key] = value
                 else:
                     logging.info(f"Key {key} does not exist; assigned value: {value}")
-                    params.yaml_set_comment_before_after_key(
-                        key,
-                        before=f"\nAdded by yaml-tools")
+                    try:
+                        params.yaml_set_comment_before_after_key(
+                            key,
+                            before=f"\nAdded by yaml-tools")
+                    except:
+                        pass
                     params[key] = value
         
         # save YAML file

@@ -747,8 +747,7 @@ class SimulatedAnnealingBinaryAsymmetricChannel:
             self.log_info("Setting the state_dict from the checkpoint ...")
             self.ptpsa.load_state_dict(loaded_state_dict)
 
-    def perform_checkpointing(self):
-        self.log_info("Checkpointing the simulation state ...")
+    def save_results(self, output_tar_gz_prefix: str):
         # save ptpsa state
         torch.save(
             self.ptpsa.state_dict(),
@@ -782,11 +781,11 @@ class SimulatedAnnealingBinaryAsymmetricChannel:
 
         # make a .tar.gz file
         self.log_info("Compressing the output ...")
-        tmp_checkpoint_path = os.path.join(self.output_root, '_checkpoint.tar.gz')
-        final_checkpoint_path = os.path.join(self.output_root, 'checkpoint.tar.gz')
-        with tarfile.open(tmp_checkpoint_path, 'w:gz') as tar:
+        tmp_output_path = os.path.join(self.output_root, f'_{output_tar_gz_prefix}.tar.gz')
+        final_output_path = os.path.join(self.output_root, f'{output_tar_gz_prefix}.tar.gz')
+        with tarfile.open(tmp_output_path, 'w:gz') as tar:
             tar.add(self.output_path, arcname=self.output_prefix)
-        os.replace(tmp_checkpoint_path, final_checkpoint_path)
+        os.replace(tmp_output_path, final_output_path)
 
     def run(self):
         self.log_info("Starting the simulation ...")
@@ -847,8 +846,10 @@ class SimulatedAnnealingBinaryAsymmetricChannel:
             # checkpoint
             if (current_time - t_last_checkpoint) > checkpoint_interval_seconds:
                 t_last_checkpoint = current_time
-                self.perform_checkpointing()
+                self.log_info("Checkpointing the simulation state ...")
+                self.save_results(output_tar_gz_prefix='checkpoint')
         
         # end with a final checkpointing
-        self.perform_checkpointing()
+        self.log_info("Saving the final simulation state ...")
+        self.save_results(output_tar_gz_prefix='final_state')
         self.log_info(f"Simulation concluded -- exit code: {exit_code}")

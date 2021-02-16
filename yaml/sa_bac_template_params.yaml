@@ -79,7 +79,7 @@ n_path_samples_per_subsystem: 50
 
 # dynamical regularization hyperparameters for constraining MCMC acceptance rate 
 lambda_mcmc_acc_rate_lo: 1.
-lambda_mcmc_acc_rate_hi: 100.
+lambda_mcmc_acc_rate_hi: 1000.
 lambda_mcmc_acc_decay_rate: 1.
 lambda_mcmc_acc_increase_rate: 1.
 
@@ -118,7 +118,7 @@ perturb_max_neighbor_hop_range: 3
 # (decreaes if you run out of GPU memory)
 eval_split_size: 512
 
-# optimality metric (valid choices: 'tpr', 'fdr', 'f1_reject_auc')
+# optimality metric (valid choices: 'tpr', 'fdr', 'f1_reject_auc', 'tpr[x]', 'fdr[x]')
 metric_type: 'fdr'
 
 # how many batches of random codebooks to sample to estimte
@@ -129,10 +129,6 @@ energy_spread_estimation_n_rounds: 100
 # values will be estimated and replaced
 rand_state_energy_loc: .inf
 rand_state_energy_scale: .inf
-
-# how many codebooks to evaluate in one batch?
-# (decreaes if you run out of GPU memory)
-energy_spread_estimation_batch_size: 512
 
 # parameters related to metric_type == 'f1_reject_auc'
 delta_q_max: 1e-2

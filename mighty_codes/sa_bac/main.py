@@ -700,8 +700,8 @@ class SimulatedAnnealingBinaryAsymmetricChannel:
                             loaded_params = yaml.load(params_yaml_file)
                         self.log_info("Loading latest_state.pkl from the checkpoint file ...")
                         loaded_state_dict = torch.load(os.path.join(self.output_path, "latest_state.pkl"))
-                except IOError as e:
-                    self.log_info("IO error occurred while loading checkpoint!")
+                except:
+                    self.log_info("Error occurred while loading checkpoint -- possibly corrupt?")
                     checkpoint_load_success = False
             else:
                 checkpoint_load_success = False

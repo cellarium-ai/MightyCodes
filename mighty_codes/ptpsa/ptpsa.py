@@ -1,4 +1,5 @@
 import numpy as np
+import math
 import torch
 import pyro
 from typing import List, Dict, Tuple, Optional, Union, Callable, Any, NamedTuple
@@ -155,6 +156,7 @@ class SimulatedAnnealingExitCode(Enum):
     REACHED_LOWEST_TEMPERATURE = 1
     REACHED_MAX_ITERS = 2
     REACHED_MAX_CYCLES = 3
+    REACHED_ABS_TOL_CONVERGENCE = 4
 
     
 class PyTorchBatchedSimulatedAnnealing:    
@@ -283,9 +285,13 @@ class PyTorchBatchedSimulatedAnnealing:
         self.top_k_keep = kwargs['top_k_keep']
         self.max_iters = kwargs['max_iters']
         self.max_cycles = kwargs['max_cycles']
+        self.convergence_abs_tol = float(kwargs['convergence_abs_tol'])
+        self.convergence_countdown = int(kwargs['convergence_countdown'])
         assert self.top_k_keep >= 1
         assert self.max_iters >= 1
         assert self.max_cycles >= 1
+        assert self.convergence_abs_tol > 0.
+        assert self.convergence_countdown >= 1
         
         self.record_iteration_summary = kwargs['record_iteration_summary']
         self.record_state_summary = kwargs['record_state_summary']
@@ -301,7 +307,7 @@ class PyTorchBatchedSimulatedAnnealing:
         self.curr_cooling_cycle_beta_0 = self.beta_0
         self.curr_cooling_cycle_beta_f = min(self.beta_max, self.curr_cooling_cycle_beta_0 / self.quench_ratio)
         self.cooling_rate = self._get_cooling_rate()
-        
+    
         # initialize to random codebooks
         self.state_bx = self.batched_state_manipulator.generate_random_state_batch(
             batch_size=self.batch_size)
@@ -347,6 +353,7 @@ class PyTorchBatchedSimulatedAnnealing:
         self.top_energy_k = float("inf") * torch.ones(
             (self.top_k_keep,), device=device, dtype=dtype)
         self.top_energy = float("inf")
+        self.prev_cycle_top_energy = float("inf")
         
         # initialize resampling population buffer
         self.resampling_buffer = deque([], maxlen=self.population_buffer_size)
@@ -355,6 +362,7 @@ class PyTorchBatchedSimulatedAnnealing:
         
         self.i_iter = 0
         self.i_cycle = 0
+        self.i_below_convergence_abs_tol = 0
         
         self.iteration_summary_list: List[SimulatedAnnealingIterationSummary] = []
         self.state_summary_list: List[SimulatedAnnealingStateSummary] = []
@@ -716,6 +724,14 @@ class PyTorchBatchedSimulatedAnnealing:
         # increment cycle counter
         self.i_cycle += 1
         
+        # check for convergence
+        cycle_to_cycle_energy_drop = np.abs(self.top_energy - self.prev_cycle_top_energy)
+        if cycle_to_cycle_energy_drop < self.convergence_abs_tol:
+            self.i_below_convergence_abs_tol += 1
+        else:
+            self.i_below_convergence_abs_tol = 0
+        self.prev_cycle_top_energy = self.top_energy
+        
         return SimulatedAnnealingIterationSummary(
             i_iter=self.i_iter,
             performed_reheating=True)
@@ -808,6 +824,8 @@ class PyTorchBatchedSimulatedAnnealing:
                 return SimulatedAnnealingExitCode.REACHED_MAX_ITERS
             elif self.i_cycle >= self.max_cycles:
                 return SimulatedAnnealingExitCode.REACHED_MAX_CYCLES
+            elif self.i_below_convergence_abs_tol >= self.convergence_countdown:
+                return SimulatedAnnealingExitCode.REACHED_ABS_TOL_CONVERGENCE
             else:
                 return SimulatedAnnealingExitCode.CONTINUE
 

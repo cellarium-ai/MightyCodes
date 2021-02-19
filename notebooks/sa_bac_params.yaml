@@ -4,6 +4,12 @@ max_iters: .inf
 # max quench cycles (forced stop)
 max_cycles: .inf
 
+# absolute cycle-to-cycle energy drop to start convergence countdown
+convergence_abs_tol: 1e-6
+
+# how many cycles to wait after energy drop is below convergence_abs_tol to call convergence?
+convergence_countdown: 3
+
 # increasing quality factor slows down both cooling and resampling
 quality_factor: 1
     
@@ -79,7 +85,7 @@ n_path_samples_per_subsystem: 50
 
 # dynamical regularization hyperparameters for constraining MCMC acceptance rate 
 lambda_mcmc_acc_rate_lo: 1.
-lambda_mcmc_acc_rate_hi: 100.
+lambda_mcmc_acc_rate_hi: 1000.
 lambda_mcmc_acc_decay_rate: 1.
 lambda_mcmc_acc_increase_rate: 1.
 
@@ -104,22 +110,27 @@ top_k_keep: 256
 experiment_prefix: 'small'
 channel_model: 'channel_bac_merfish'
 min_hamming_weight: 1
-max_hamming_weight: 7
-code_length: 8
-n_types: 80
-source_nonuniformity: 300.
+max_hamming_weight: 6
+code_length: 7
+n_types: 16
+source_nonuniformity: 1000.
 
 # max size of various atomic perturbations
 perturb_max_hamming_distance: 4
 perturb_max_hamming_weight_change: 2
 perturb_max_neighbor_hop_range: 3
 
-# optimality metric (valid choices: 'tpr', 'fdr', 'f1_reject_auc')
+# how many codebooks to evaluate in one batch?
+# (decreaes if you run out of GPU memory)
+eval_split_size: 128
+
+# optimality metric (valid choices: 'tpr', 'fdr', 'f1_reject_auc', 'tpr[x]', 'fdr[x]')
 metric_type: 'fdr'
 
 # how many batches of random codebooks to sample to estimte
 # the energy spread?
-energy_spread_estimation_n_rounds: 20
+energy_spread_estimation_n_rounds: 100
+energy_spread_estimation_batch_size: 512
 
 # energy loc and scale of random states; if set to ".inf", these
 # values will be estimated and replaced
@@ -140,5 +151,9 @@ log_sig_digits: 4
 log_column_width_small: 16
 log_column_width_large: 32
 log_energy_scale: 100.
-output_root: /home/jupyter/mb-ml-data/MERFISH-coding/sa
+
+# set to a writable path
+output_root: .
+
+# leave this be
 checkpoint_file: checkpoint.tar.gz

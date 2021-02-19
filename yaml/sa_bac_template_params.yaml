@@ -4,6 +4,12 @@ max_iters: .inf
 # max quench cycles (forced stop)
 max_cycles: .inf
 
+# absolute cycle-to-cycle energy drop to start convergence countdown
+convergence_abs_tol: 1e-6
+
+# how many cycles to wait after energy drop is below convergence_abs_tol to call convergence?
+convergence_countdown: 3
+
 # increasing quality factor slows down both cooling and resampling
 quality_factor: 1
     

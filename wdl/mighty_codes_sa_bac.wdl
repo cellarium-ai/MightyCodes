@@ -85,7 +85,7 @@ task run_mighty_codes_sa_bac {
          zones: "${hardware_zones}"
          gpuCount: 1
          gpuType: "${hardware_gpu_type}"
-         maxRetries: 0
+         maxRetries: 10
          preemptible: hardware_preemptible_tries
          checkpointFile: "checkpoint.tar.gz"
     }

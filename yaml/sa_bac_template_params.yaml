@@ -1,21 +1,24 @@
 # max iterations (forced stop)
 max_iters: .inf
-    
+
 # max quench cycles (forced stop)
 max_cycles: .inf
 
 # absolute cycle-to-cycle energy drop to start convergence countdown
-convergence_abs_tol: 1e-6
+# Updated by yaml-tools; old value: 1e-06, new value: 1e-06
+convergence_abs_tol: 1e-06
 
 # how many cycles to wait after energy drop is below convergence_abs_tol to call convergence?
-convergence_countdown: 3
+# Updated by yaml-tools; old value: 3, new value: 10
+convergence_countdown: 10
 
 # increasing quality factor slows down both cooling and resampling
-quality_factor: 1
-    
+# Updated by yaml-tools; old value: 1, new value: 20
+quality_factor: 10
+
 # number of cooling iterations for quality_factor = 1
 base_cooling_iters: 500
-    
+
 # stored quenching cycles
 population_buffer_size: 50
 
@@ -45,7 +48,10 @@ quench_ratio: 0.01
 
 # peak to peak temperature ratio between consecutive quench cycles
 # (smaller values mean lower reheating temperatures)
-reheating_ratio: 0.8
+reheating_ratio: 0.9
+
+# resampling temperature at the beginning of a new cycle (w.r.t. to the cycle start temperature)
+reheating_resampling_beta_ratio: 5.0
 
 # position in cycle to start Boltzmann resampling
 # (0.0 and 1.0 mark the start and end of a cycle, in terms of beta)
@@ -107,13 +113,19 @@ record_state_summary: true
 top_k_keep: 256
 
 # binary asymmetric channel model specification
-experiment_prefix: 'small'
-channel_model: 'channel_bac_merfish'
+# Updated by yaml-tools; old value: small, new value: sa_bac
+experiment_prefix: sa_bac
+# Updated by yaml-tools; old value: channel_bac_merfish, new value: channel_bac_merfish
+channel_model: channel_bac_merfish
+# Updated by yaml-tools; old value: 1, new value: 1
 min_hamming_weight: 1
+# Updated by yaml-tools; old value: 7, new value: 7
 max_hamming_weight: 7
+# Updated by yaml-tools; old value: 8, new value: 8
 code_length: 8
-n_types: 80
-source_nonuniformity: 300.
+# Updated by yaml-tools; old value: 80, new value: 64
+n_types: 64
+source_nonuniformity: 1000.0
 
 # max size of various atomic perturbations
 perturb_max_hamming_distance: 4
@@ -122,10 +134,12 @@ perturb_max_neighbor_hop_range: 3
 
 # how many codebooks to evaluate in one batch?
 # (decreaes if you run out of GPU memory)
-eval_split_size: 512
+# Updated by yaml-tools; old value: 512, new value: 128
+eval_split_size: 128
 
 # optimality metric (valid choices: 'tpr', 'fdr', 'f1_reject_auc', 'tpr[x]', 'fdr[x]')
-metric_type: 'fdr'
+# Updated by yaml-tools; old value: fdr, new value: fdr
+metric_type: fdr
 
 # how many batches of random codebooks to sample to estimte
 # the energy spread?
@@ -143,9 +157,10 @@ n_map_reject_thresholds: 20
 max_reject_ratio: 0.2
 
 # logging and checkpointing
-checkpoint_interval_seconds: 60
-ignore_checkpoint: False
-make_plots: True
+# Updated by yaml-tools; old value: 60, new value: 500
+checkpoint_interval_seconds: 1000
+ignore_checkpoint: false
+make_plots: true
 log_frequency: 100
 log_sig_digits: 4
 log_column_width_small: 16

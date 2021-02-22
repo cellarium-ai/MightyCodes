@@ -212,6 +212,9 @@ class PyTorchBatchedSimulatedAnnealing:
         self.reheating_ratio = kwargs['reheating_ratio']
         assert 0. < self.reheating_ratio < 1.
         
+        self.reheating_resampling_beta_ratio = kwargs['reheating_resampling_beta_ratio']
+        assert self.reheating_resampling_beta_ratio > 0.
+        
         self.mcmc_eff_acc_rate_lo = kwargs['mcmc_eff_acc_rate_lo']
         assert 0. < self.mcmc_eff_acc_rate_lo < 1.
 
@@ -691,8 +694,7 @@ class PyTorchBatchedSimulatedAnnealing:
             n_states = buffered_energy_n.shape[0]
 
             # bolzmann resampling w/ replacement
-            resampling_beta = 2. * next_cooling_cycle_beta_0 * next_cooling_cycle_beta_f / (
-                next_cooling_cycle_beta_0 + next_cooling_cycle_beta_f)
+            resampling_beta = next_cooling_cycle_beta_0 / self.reheating_resampling_beta_ratio
             log_boltzmann_n = - resampling_beta * buffered_energy_n
             indices = torch.distributions.Categorical(logits=log_boltzmann_n.expand([self.batch_size, n_states])).sample()
 

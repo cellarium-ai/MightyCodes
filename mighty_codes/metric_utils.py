@@ -279,3 +279,118 @@ def estimate_codebook_f1_reject_auc(
     metrics_dict['clamped_f_1_bqt'] = f_1_bqt
     
     return metrics_dict
+
+
+def get_metrics_dict_from_decoder_output_dict(
+        decoder_output_dict: Dict[str, Union[torch.Tensor, str]],
+        metrics_dict_type: str,
+        **metrics_kwargs) -> Dict[str, torch.Tensor]:
+    
+    assert 'decoder_type' in decoder_output_dict
+    decoder_type = decoder_output_dict['decoder_type']
+    assert decoder_type in {'posterior_sampled', 'map_reject'}
+    assert metrics_dict_type in {'basic', 'auc'}
+    
+    if metrics_dict_type == 'basic':
+        
+        if decoder_type == 'posterior_sampled':
+            
+            assert 'weighted_confusion_matrix_btt' in decoder_output_dict
+            
+            return get_metrics_from_confusion_matrix_batched(
+                weighted_confusion_matrix_btt=decoder_output_dict['weighted_confusion_matrix_btt'])
+            
+        elif decoder_type == 'map_reject':
+            
+            assert 'weighted_confusion_matrix_bqtu' in decoder_output_dict
+            assert 'num_rej_bqt' in decoder_output_dict
+            assert 'num_all_bt' in decoder_output_dict
+            
+            return get_metrics_from_confusion_matrix_batched_reject(
+                weighted_confusion_matrix_bqtu=decoder_output_dict['weighted_confusion_matrix_bqtu'],
+                num_rej_bqt=decoder_output_dict['num_rej_bqt'],
+                num_all_bt=decoder_output_dict['num_all_bt'])
+    
+    if metrics_dict_type == 'auc':
+        
+        assert decoder_type == 'map_reject'
+        assert 'weighted_confusion_matrix_bqtu' in decoder_output_dict
+        assert 'num_rej_bqt' in decoder_output_dict
+        assert 'num_all_bt' in decoder_output_dict
+        assert 'max_rej_ratio' in metrics_kwargs
+        assert 'interpolation_method' in metrics_kwargs
+
+        return estimate_codebook_f1_reject_auc(
+            weighted_confusion_matrix_bqtu=decoder_output_dict['weighted_confusion_matrix_bqtu'],
+            num_rej_bqt=decoder_output_dict['num_rej_bqt'],
+            num_all_bt=decoder_output_dict['num_all_bt'],
+            max_rej_ratio=metrics_kwargs['max_rej_ratio'],
+            interpolation_method=metrics_kwargs['interpolation_method'],
+            device=decoder_output_dict['weighted_confusion_matrix_bqtu'].device,
+            dtype=decoder_output_dict['weighted_confusion_matrix_bqtu'].dtype)
+    
+    raise RuntimeError('Should not reach here!')
+
+
+def parse_quantile_based_metric_type_str(
+        base_metric_type: str,
+        metric_type_string: str) -> Optional[float]:
+    if metric_type_string[:4] == (base_metric_type + '[') and metric_type_string[-1] == ']':
+        try:
+            i_begin = metric_type_string.find('[') + 1
+            i_end = metric_type_string.find(']')
+            assert i_end > i_begin
+            quantile = float(metric_type_string[i_begin:i_end])
+            assert 0. < quantile < 1.
+            return quantile
+        except:
+            return None
+    return None
+    
+
+def get_top_quantile(quantile: float, metric_bt: torch.Tensor) -> torch.Tensor:
+    n_types = metric_bt.size(1)
+    n_keep = math.ceil(n_types * quantile)
+    sorted_metric_bt = torch.sort(metric_bt, dim=-1).values
+    return sorted_metric_bt[:, -n_keep:]
+
+
+def get_optimality_from_metrics_dict(
+        metrics_dict: Dict[str, torch.Tensor],
+        optimality_type: str) -> torch.Tensor:
+    
+    mean_reduce = lambda metric_bt: metric_bt.mean(-1)
+    complement = lambda metric_b: (1. - metric_b)
+    optional_fdr_quantile = parse_quantile_based_metric_type_str('fdr', optimality_type)
+    optional_tpr_quantile = parse_quantile_based_metric_type_str('tpr', optimality_type)
+
+    if optimality_type == 'f1_reject_auc':
+        return mean_reduce(
+            metrics_dict['normalized_auc_f_1_rej_bt'])
+
+    elif optimality_type == 'fdr':
+        return mean_reduce(
+            complement(
+                metrics_dict['fdr_bt']))
+
+    elif optimality_type == 'tpr':
+        return mean_reduce(
+            metrics_dict['tpr_bt'])
+
+    elif optional_fdr_quantile is not None:
+        return mean_reduce(
+            complement(
+                get_top_quantile(
+                    quantile=optional_fdr_quantile,
+                    metric_bt=metrics_dict['fdr_bt'])))
+
+    elif optional_tpr_quantile is not None:
+        return mean_reduce(
+            get_top_quantile(
+                quantile=optional_fdr_quantile,
+                metric_bt=metrics_dict['tpr_bt']))
+    else:
+        
+        raise ValueError(
+            'Unknown metric type -- allowed values: '
+            'f1_reject_auc, fdr, tpr, fdr[<quantile>], tpr[<quantile>]')

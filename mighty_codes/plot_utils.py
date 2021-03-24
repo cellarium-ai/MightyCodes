@@ -23,7 +23,7 @@ plt.rc('figure', titlesize=BIGGER_SIZE)  # fontsize of the figure title
 
 
 
-def plot_metric_vs_reject(
+def plot_metrics(
         metrics_dict: Dict[str, torch.Tensor],
         batch_index: int,
         x_key: str = 'clamped_rej',

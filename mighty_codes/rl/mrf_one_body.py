@@ -2,9 +2,11 @@ import numpy as np
 import torch
 from typing import List, Tuple, Union, Dict
 
-from mighty_codes.nn_utils import generate_dense_nnet, assert_nn_specs_io_features
+from mighty_codes.nn_utils import \
+    generate_dense_nnet, \
+    assert_nn_specs_io_features
 
-            
+
 class OneBodyMRFPotential(torch.nn.Module):
     def __init__(
             self,
@@ -89,7 +91,7 @@ class NeuralPIOneBodyMRFPotential(OneBodyMRFPotential):
             pi: torch.Tensor,
             pi_cdf: torch.Tensor):
    
-        # get props
+        # add a dummy batch dimension and get one-body potential props
         code_length = c_bls.shape[-2]
         props_dict = self.get_one_body_potential_props(
             n_types_b=n_types.unsqueeze(-1),
@@ -99,10 +101,13 @@ class NeuralPIOneBodyMRFPotential(OneBodyMRFPotential):
             pi_cdf_b=pi_cdf.unsqueeze(-1))
         
         # calculate potential
-        symbol_weights_s = props_dict['symbol_weights_bs'][0, :]
-        strength = props_dict['potential_strength_b'][0]
-        m_bs = c_bls.mean(-2)
-        potential_b = strength * (m_bs - symbol_weights_s).abs().pow(self.lp_norm).sum(-1)
+        target_symbol_weights_s = props_dict['symbol_weights_bs'][0, :]
+        potential_strength = props_dict['potential_strength_b'][0]
+        code_symbol_weights_bs = c_bls.mean(-2)
+        potential_b = potential_strength * (code_symbol_weights_bs - target_symbol_weights_s) \
+            .abs() \
+            .pow(self.lp_norm) \
+            .sum(-1)
         
         return potential_b
 

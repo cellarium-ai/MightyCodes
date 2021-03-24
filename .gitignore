@@ -12,3 +12,6 @@ ws/
 .venv/
 .eggs/
 .idea/
+*.pkl
+*.png
+*.pt

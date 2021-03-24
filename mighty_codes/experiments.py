@@ -23,7 +23,19 @@ class ExperimentSpecification(NamedTuple):
     min_symbol_weight_s: List[int]
     max_symbol_weight_s: List[int]
     pi_t: np.ndarray
+        
+    def __str__(self) -> str:
+        return f'ExperimentSpecification:\n' \
+               f'  - name: {self.name}\n' \
+               f'  - n_types: {self.n_types}\n' \
+               f'  - n_symbols: {self.n_symbols}\n' \
+               f'  - code_length: {self.code_length}\n' \
+               f'  - min_symbol_weight_s: {int_list_repr(self.min_symbol_weight_s)}\n' \
+               f'  - max_symbol_weight_s: {int_list_repr(self.max_symbol_weight_s)}\n' \
+               f'  - source nonuniformity: {(self.pi_t[0] / self.pi_t[-1]):.3f}'
 
+    def __repr__(self) -> str:
+        return self.__str__()
 
 def int_list_repr(l: List[int]) -> str:
     return '(' + ','.join(list(map(str, l))) + ')'
@@ -31,8 +43,10 @@ def int_list_repr(l: List[int]) -> str:
 
 def generate_experiment_spec(
         name_prefix: str,
-        min_symbol_weight_s: List[int],
-        max_symbol_weight_s: List[int],
+        min_symbol_weight_s: Optional[List[int]] = None,
+        max_symbol_weight_s: Optional[List[int]] = None,
+        min_rel_symbol_weight_s: Optional[List[int]] = None,
+        max_rel_symbol_weight_s: Optional[List[int]] = None,
         n_symbols: int = 2,
         code_length: Optional[int] = None,
         n_types: Optional[int] = None,
@@ -49,20 +63,36 @@ def generate_experiment_spec(
     """A helper function for generating a specific coding problem, or sampling one
     from a range of possible problems."""
     
-    assert len(min_symbol_weight_s) == n_symbols
-    assert len(max_symbol_weight_s) == n_symbols
-    
+    abs_symbol_weight_provided = (min_symbol_weight_s is not None) and (max_symbol_weight_s is not None)
+    rel_symbol_weight_provided = (min_rel_symbol_weight_s is not None) and (max_rel_symbol_weight_s is not None)
+    assert abs_symbol_weight_provided ^ rel_symbol_weight_provided
+    if abs_symbol_weight_provided:
+        assert len(min_symbol_weight_s) == n_symbols
+        assert len(max_symbol_weight_s) == n_symbols
+    if rel_symbol_weight_provided:
+        assert len(min_rel_symbol_weight_s) == n_symbols
+        assert len(max_rel_symbol_weight_s) == n_symbols
+
     # choose code length
     if code_length is None:
         code_length = np.random.randint(min_code_length, max_code_length + 1)
         
+    # rel symbol weight to abs
+    if rel_symbol_weight_provided:
+        min_symbol_weight_s = np.clip(
+            np.round(code_length * np.asarray(min_rel_symbol_weight_s, dtype=np.float)),
+            a_min=0., a_max=code_length).astype(np.int).tolist()
+        max_symbol_weight_s = np.clip(
+            np.round(code_length * np.asarray(max_rel_symbol_weight_s, dtype=np.float)),
+            a_min=0., a_max=code_length).astype(np.int).tolist()
+
     # choose n_types
     if n_types is None:
         code_space_size = n_symbols ** code_length
         n_types_lo = max(min_n_types, int(min_packing_ratio * code_space_size))
         n_types_hi = max(n_types_lo, min(max_n_types, int(max_packing_ratio * code_space_size)))
         n_types = np.random.randint(n_types_lo, n_types_hi + 1)
-    
+            
     # choose prior
     if log_p is None:
         if source_nonuniformity is None:

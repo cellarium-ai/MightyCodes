@@ -7,6 +7,7 @@ ACTIVATION_MAP = {
     'relu': torch.nn.ReLU(inplace=True),
     'softplus': torch.nn.Softplus(),
     'exp': torch.exp,
+    'tanh': torch.nn.Tanh(),
     'elu': torch.nn.ELU(inplace=True),
     'selu': torch.nn.SELU(inplace=True)
 }

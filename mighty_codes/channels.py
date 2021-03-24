@@ -2,16 +2,41 @@ import numpy as np
 import torch
 from typing import Union, NamedTuple, Optional, Dict, List, Tuple, Set
 from boltons.cacheutils import cachedmethod
+from abc import abstractmethod
 
-from mighty_codes.torch_utils import to_torch, to_np, to_one_hot_encoded, split_tensors
-from mighty_codes.metric_utils import get_confusion_matrix_from_indices
+from mighty_codes.torch_utils import \
+    to_torch, \
+    to_np, \
+    to_one_hot_encoded, \
+    split_tensors
+
+from mighty_codes.metric_utils import \
+    get_confusion_matrix_from_indices, \
+    get_log_prob_map_thresholds_q
 
 
 class SingleEntityChannelModel:
-    def __init__(self):
-        pass
+    def __init__(self, n_symbols: int):
+        self.n_symbols = n_symbols
 
+    @abstractmethod
+    def get_weighted_confusion_matrix(
+            self,
+            codebook_btls: torch.Tensor,
+            pi_bt: torch.Tensor,
+            decoder_type: str,
+            **kwargs) -> Dict[str, torch.Tensor]:
+        raise NotImplementedError
+    
+    @abstractmethod
+    def to(self, device: torch.device) -> 'SingleEntityChannelModel':
+        raise NotImplementedError
 
+    @abstractmethod
+    def type(self, dtype: torch.dtype) -> 'SingleEntityChannelModel':
+        raise NotImplementedError
+
+    
 class GaussianChannelModel(SingleEntityChannelModel):
     def __init__(
             self,
@@ -21,9 +46,8 @@ class GaussianChannelModel(SingleEntityChannelModel):
             scale_sr: torch.Tensor,
             device: torch.device,
             dtype: torch.dtype):
-        super(GaussianChannelModel, self).__init__()
+        super(GaussianChannelModel, self).__init__(n_symbols=n_symbols)
 
-        self.n_symbols = n_symbols
         self.n_readout = n_readout
 
         self.loc_sr = to_torch(loc_sr, device=device, dtype=dtype)
@@ -43,7 +67,16 @@ class GaussianChannelModel(SingleEntityChannelModel):
             scale_sr=self.scale_sr.to(device),
             device=device,
             dtype=self.dtype)
-        
+
+    def type(self, dtype: torch.dtype) -> 'GaussianChannelModel':
+        return GaussianChannelModel(
+            n_symbols=self.n_symbols,
+            n_readout=self.n_readout,
+            loc_sr=self.loc_sr.type(dtype),
+            scale_sr=self.scale_sr.type(dtype),
+            device=self.device,
+            dtype=dtype)
+
     def rsample_flat(
             self,
             n_samples_per_type: int,
@@ -241,7 +274,7 @@ class GaussianChannelModel(SingleEntityChannelModel):
             codebook_btls: torch.Tensor,
             pi_bt: torch.Tensor,
             n_samples_per_type: int,
-            max_size: int) -> torch.Tensor:
+            max_n_samples_per_type_per_sampling_round: int) -> torch.Tensor:
         """Estimates the weighted confusion matrix for a given batch of codebooks
         via Monte-Carlo sampling for a Gaussian channel. The decoder is assumed to
         be soft (e.g. stochastic sampling from the posterior).
@@ -263,7 +296,9 @@ class GaussianChannelModel(SingleEntityChannelModel):
         while i_samples_per_type < n_samples_per_type:
 
             # how many samples per type to draw?
-            c_samples_per_type = min(max_size, n_samples_per_type - i_samples_per_type)
+            c_samples_per_type = min(
+                max_n_samples_per_type_per_sampling_round,
+                n_samples_per_type - i_samples_per_type)
 
             # get a differentiable readout sample
             source_type_index_n, rsampled_readout_bnlr = self.batched_rsample_flat(
@@ -399,7 +434,70 @@ class GaussianChannelModel(SingleEntityChannelModel):
             'num_rej_bqt': num_rej_bqt
         }
 
-    
+    def get_weighted_confusion_matrix(
+            self,
+            codebook_btls: torch.Tensor,
+            pi_bt: torch.Tensor,
+            decoder_type: str,
+            **kwargs) -> Dict[str, torch.Tensor]:
+        
+        # basic asserts
+        assert isinstance(codebook_btls, torch.Tensor)
+        assert codebook_btls.ndim == 4
+        batch_size, n_types, code_length, n_symbols = codebook_btls.shape
+        assert n_symbols == self.n_symbols
+        assert isinstance(pi_bt, torch.Tensor)
+        assert pi_bt.ndim == 2
+        assert pi_bt.shape == (batch_size, n_types)
+        
+        output_dict = dict()
+        output_dict['decoder_type'] = decoder_type
+        
+        if decoder_type == 'posterior_sampled':
+            
+            assert 'n_samples_per_type' in kwargs
+            assert 'max_n_samples_per_type_per_sampling_round' in kwargs
+            
+            output_dict['weighted_confusion_matrix_btt'] = self.estimate_weighted_confusion_matrix_soft_mc(
+                codebook_btls=codebook_btls,
+                pi_bt=pi_bt,
+                n_samples_per_type=kwargs['n_samples_per_type'],
+                max_n_samples_per_type_per_sampling_round=kwargs['max_n_samples_per_type_per_sampling_round'])
+            
+        elif decoder_type == 'map_reject':
+            
+            assert 'n_samples_per_type' in kwargs
+            assert 'max_n_samples_per_type_per_sampling_round' in kwargs
+            assert 'delta_q_max' in kwargs
+            assert 'n_map_reject_thresholds' in kwargs
+            
+            log_prob_map_thresholds_q = get_log_prob_map_thresholds_q(
+                n_types=n_types,
+                delta_q_max=kwargs['delta_q_max'],
+                n_map_reject_thresholds=kwargs['n_map_reject_thresholds'],
+                device=self.device,
+                dtype=self.dtype)
+
+            confusion_matrix_output_dict = self.estimate_weighted_confusion_matrix_map_reject_mc(
+                codebook_btls=codebook_btls,
+                pi_bt=pi_bt,
+                n_samples_per_type=kwargs['n_samples_per_type'],
+                max_n_samples_per_type_per_sampling_round=kwargs['max_n_samples_per_type_per_sampling_round'],
+                loq_prob_map_thresholds_q=log_prob_map_thresholds_q)
+            
+            output_dict['log_prob_map_thresholds_q'] = log_prob_map_thresholds_q
+            output_dict['weighted_confusion_matrix_bqtu'] = confusion_matrix_output_dict['weighted_confusion_matrix_bqtu']
+            output_dict['num_all_bt'] = confusion_matrix_output_dict['num_all_bt']
+            output_dict['num_rej_bqt'] = confusion_matrix_output_dict['num_rej_bqt']
+            
+        else:
+            raise ValueError(
+                f'Bad input for decoder_type ({decoder_type}); '
+                f'allowed values: posterior_sampled, map_reject')
+        
+        return output_dict
+
+
 class BinaryChannelSpecification(NamedTuple):
     # p(SOURCE=0, TARGET=1)
     p_01: float
@@ -408,14 +506,14 @@ class BinaryChannelSpecification(NamedTuple):
     p_10: float
 
 
-class BinaryAsymmetricChannelModel(GaussianChannelModel):
+class BinaryAsymmetricChannelModel(SingleEntityChannelModel):
     
     def __init__(
             self,
             channel_spec_list: List[BinaryChannelSpecification],
             device: torch.device,
             dtype: torch.dtype):
-        super(GaussianChannelModel, self).__init__()
+        super(BinaryAsymmetricChannelModel, self).__init__(n_symbols=2)
         
         assert isinstance(channel_spec_list, List)            
         assert all(isinstance(entry, BinaryChannelSpecification) for entry in channel_spec_list)
@@ -427,6 +525,20 @@ class BinaryAsymmetricChannelModel(GaussianChannelModel):
         # cache
         self._cache = dict()
         
+    @abstractmethod
+    def to(self, device: torch.device) -> 'BinaryAsymmetricChannelModel':
+        return BinaryAsymmetricChannelModel(
+            channel_spec_list=self.channel_spec_list,
+            device=device,
+            dtype=self.dtype)
+
+    @abstractmethod
+    def type(self, dtype: torch.dtype) -> 'BinaryAsymmetricChannelModel':
+        return BinaryAsymmetricChannelModel(
+            channel_spec_list=self.channel_spec_list,
+            device=self.device,
+            dtype=dtype)
+
     @cachedmethod(cache='_cache')
     def get_bool_seq_space_xl(self, code_length: int) -> torch.Tensor:
         bool_seq_space_xl_np = np.zeros((2 ** code_length, code_length), dtype=bool)
@@ -623,7 +735,7 @@ class BinaryAsymmetricChannelModel(GaussianChannelModel):
             voronoi_bxu = to_one_hot_encoded(voronoi_bx, n_types).type(self.dtype)
             weighted_confusion_matrix_btu = torch.einsum(
                 'bt,bxt,bxu->btu', pi_bt, probs_bxt, voronoi_bxu)
-            return weighted_confusion_matrix_btu
+            return weighted_confusion_matrix_btu[:, None, :, :]
 
     def get_weighted_confusion_matrix_moffitt_split(
             self,
@@ -668,3 +780,71 @@ class BinaryAsymmetricChannelModel(GaussianChannelModel):
                     pi_bt=_pi_bt,
                     log_prob_map_thresholds_q=log_prob_map_thresholds_q))
         return torch.cat(split_output, dim=0)
+
+    def get_weighted_confusion_matrix(
+            self,
+            codebook_btls: torch.Tensor,
+            pi_bt: torch.Tensor,
+            decoder_type: str,
+            **kwargs) -> Dict[str, torch.Tensor]:
+        
+        # basic asserts
+        assert isinstance(codebook_btls, torch.Tensor)
+        assert codebook_btls.ndim == 4
+        batch_size, n_types, code_length, n_symbols = codebook_btls.shape
+        assert n_symbols == 2
+        assert isinstance(pi_bt, torch.Tensor)
+        assert pi_bt.ndim == 2
+        assert pi_bt.shape == (batch_size, n_types)
+        
+        output_dict = dict()
+        output_dict['decoder_type'] = decoder_type
+        
+        if decoder_type == 'posterior_sampled':
+            
+            assert 'split_size' in kwargs
+            
+            output_dict['weighted_confusion_matrix_btt'] = self.get_weighted_confusion_matrix_soft_split(
+                binary_codebook_btl=codebook_btls[..., 1],
+                pi_bt=pi_bt,
+                split_size=kwargs['split_size'])
+            
+        elif decoder_type == 'moffitt':
+            
+            assert 'split_size' in kwargs
+            
+            output_dict['weighted_confusion_matrix_btu'] = self.get_weighted_confusion_matrix_moffitt_split(
+                binary_codebook_btl=codebook_btls[..., 1],
+                pi_bt=pi_bt,
+                split_size=kwargs['split_size'])
+
+        elif decoder_type == 'map_reject':
+            
+            assert 'split_size' in kwargs
+            assert 'delta_q_max' in kwargs
+            assert 'n_map_reject_thresholds' in kwargs
+            
+            log_prob_map_thresholds_q = get_log_prob_map_thresholds_q(
+                n_types=n_types,
+                delta_q_max=kwargs['delta_q_max'],
+                n_map_reject_thresholds=kwargs['n_map_reject_thresholds'],
+                device=self.device,
+                dtype=self.dtype)
+
+            output_dict['weighted_confusion_matrix_bqtu'] = self.get_weighted_confusion_matrix_map_reject_split(
+                binary_codebook_btl=codebook_btls[..., 1],
+                pi_bt=pi_bt,
+                log_prob_map_thresholds_q=log_prob_map_thresholds_q,
+                split_size=kwargs['split_size'])
+            
+            output_dict['log_prob_map_thresholds_q'] = log_prob_map_thresholds_q
+            output_dict['num_all_bt'] = None
+            output_dict['num_rej_bqt'] = None
+
+        else:
+            
+            raise ValueError(
+                f'Bad input for decoder_type ({decoder_type}); '
+                f'allowed values: moffitt, posterior_sampled, map_reject')
+        
+        return output_dict

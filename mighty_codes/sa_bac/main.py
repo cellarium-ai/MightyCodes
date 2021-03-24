@@ -536,9 +536,10 @@ class BatchedBinaryCodebookEnergyCalculator(BatchedStateEnergyCalculator):
             self._calculate_state_metrics_dict = basic_metrics_dict_calculator
             self._calculate_state_energy = lambda state_bx: \
                 self.mean_reduce(
-                    self.get_top_quantile(
-                        quantile=optional_fdr_quantile,
-                        metric_bt=self.complement(self._calculate_state_metrics_dict(state_bx)['tpr_bt'])))
+                    self.complement(
+                        self.get_top_quantile(
+                            quantile=optional_fdr_quantile,
+                            metric_bt=self.complement(self._calculate_state_metrics_dict(state_bx)['tpr_bt']))))
         else:
             raise ValueError(
                 'Unknown metric type -- allowed values: '
@@ -711,11 +712,32 @@ class SimulatedAnnealingBinaryAsymmetricChannel:
         # if the checkpoint is extract, the output path exists; otherwise, we need to make it 
         os.makedirs(self.output_path, exist_ok=True)
 
+        # estimate energy spread?
+        estimate_energy_spread = True
+        
+        # energy spread available in params?
+        if 'rand_state_energy_loc' in params:
+            if 'rand_state_energy_scale' in params:
+                if params['rand_state_energy_loc'] < float("inf"):
+                    if params['rand_state_energy_scale'] < float("inf"):
+                        energy_moments_dict = dict()
+                        energy_moments_dict['energy_loc'] = params['rand_state_energy_loc']
+                        energy_moments_dict['energy_scale'] = params['rand_state_energy_scale']        
+                        estimate_energy_spread = False
+                        
+        # energy spread available in loaded_params?
         if checkpoint_load_success:
+            if 'rand_state_energy_loc' in loaded_params:
+                if 'rand_state_energy_scale' in loaded_params:
+                    if loaded_params['rand_state_energy_loc'] < float("inf"):
+                        if loaded_params['rand_state_energy_scale'] < float("inf"):
+                            energy_moments_dict = dict()
+                            energy_moments_dict['energy_loc'] = loaded_params['rand_state_energy_loc']
+                            energy_moments_dict['energy_scale'] = loaded_params['rand_state_energy_scale']        
+                            estimate_energy_spread = False
+            
+        if not estimate_energy_spread:
             self.log_info("Using the previously calculated energy spread from the checkpoint ...")
-            energy_moments_dict = dict()
-            energy_moments_dict['energy_loc'] = loaded_params['rand_state_energy_loc']
-            energy_moments_dict['energy_scale'] = loaded_params['rand_state_energy_scale']
         else:
             # calculate the energy spread of random codebooks
             self.log_info("Determining energy spread ...")
